@@ -16,6 +16,13 @@ import useVideoContext from '../../hooks/useVideoContext/useVideoContext';
 import { Typography } from '@material-ui/core';
 import FlipCameraButton from './FlipCameraButton/FlipCameraButton';
 import { DeviceSelector } from './DeviceSelector/DeviceSelector';
+import axios from 'axios';
+
+interface StartVideoResponse {
+  token: string;
+  room: string;
+  roomUuid: string;
+}
 
 const useStyles = makeStyles((theme: Theme) =>
   createStyles({
@@ -68,28 +75,48 @@ export default function MenuBar() {
 
   const [name, setName] = useState<string>(user?.displayName || '');
   const [roomName, setRoomName] = useState<string>('');
+  const [patientToken, setPatientToken] = useState<string>('');
+
+  const isHost = !URLRoomName;
 
   useEffect(() => {
     if (URLRoomName) {
       setRoomName(URLRoomName);
     }
+    console.log({ URLRoomName });
   }, [URLRoomName]);
 
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     setName(event.target.value);
   };
 
-  const handleRoomNameChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setRoomName(event.target.value);
+  const handlePatientTokenChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setPatientToken(event.target.value);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     // If this app is deployed as a twilio function, don't change the URL because routing isn't supported.
-    if (!window.location.origin.includes('twil.io')) {
-      window.history.replaceState(null, '', window.encodeURI(`/room/${roomName}${window.location.search || ''}`));
+    if (isHost) {
+      const response = await axios.get<StartVideoResponse>(
+        `${process.env.REACT_APP_API_URL}/v1/accounts/video/start/6527f806-3601-4841-80a6-74636fb32215`,
+        {
+          headers: {
+            Accept: 'application/json',
+            'Api-Token': 'TY27s2ybsnzejNjL782LWSXE',
+            Authorization:
+              'Bearer eyJhbGciOiJIUzI1NiJ9.eyJpZCI6MSwiZXhwIjoxNTk0MDY0OTQ4fQ.5i4lz861Id98QWPlPfe7o4yEzJtttqWpcQyP5m0EwWE',
+            verify: false,
+          },
+        }
+      );
+
+      connect(response.data.token);
+      window.history.replaceState(null, '', window.encodeURI(`/room/${response.data.room}`));
+      console.log({ roomUuid: response.data.roomUuid });
+    } else {
+      connect(patientToken);
     }
-    getToken(name, roomName).then(token => connect(token));
   };
 
   return (
@@ -97,36 +124,28 @@ export default function MenuBar() {
       <Toolbar className={classes.toolbar}>
         {roomState === 'disconnected' ? (
           <form className={classes.form} onSubmit={handleSubmit}>
-            {window.location.search.includes('customIdentity=true') || !user?.displayName ? (
-              <TextField
-                id="menu-name"
-                label="Name"
-                className={classes.textField}
-                value={name}
-                onChange={handleNameChange}
-                margin="dense"
-              />
+            {!isHost ? (
+              <>
+                <TextField
+                  id="menu-token"
+                  label="Token"
+                  className={classes.textField}
+                  value={patientToken}
+                  onChange={handlePatientTokenChange}
+                  margin="dense"
+                />
+              </>
             ) : (
-              <Typography className={classes.displayName} variant="body1">
-                {user.displayName}
-              </Typography>
+              <Typography className={classes.displayName} variant="body1"></Typography>
             )}
-            <TextField
-              id="menu-room"
-              label="Room"
-              className={classes.textField}
-              value={roomName}
-              onChange={handleRoomNameChange}
-              margin="dense"
-            />
             <Button
               className={classes.joinButton}
               type="submit"
               color="primary"
               variant="contained"
-              disabled={isConnecting || !name || !roomName || isFetching}
+              disabled={isConnecting || isFetching}
             >
-              Join Room
+              {isHost ? 'Start an instant video session' : 'Join session'}
             </Button>
             {(isConnecting || isFetching) && <CircularProgress className={classes.loadingSpinner} />}
           </form>
